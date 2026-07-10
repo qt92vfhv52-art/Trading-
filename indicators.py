@@ -39,6 +39,80 @@ def find_swings(df: pd.DataFrame, window: int = 5):
 
     return df
 
+def filter_swings(df, min_distance=0.005):
+    """
+    إزالة القمم والقيعان المتقاربة.
+
+    min_distance = أقل فرق سعري (مثلاً 0.005 = 0.5%)
+    """
+
+    df = df.copy()
+
+    highs = df[df["Swing High"]].copy()
+
+    keep = []
+
+    last_price = None
+
+    for idx, row in highs.iterrows():
+
+        price = row["High"]
+
+        if last_price is None:
+            keep.append(idx)
+            last_price = price
+            continue
+
+        change = abs(price - last_price) / last_price
+
+        if change >= min_distance:
+            keep.append(idx)
+            last_price = price
+
+        else:
+            # احتفظ بالأعلى
+            if price > last_price:
+                keep[-1] = idx
+                last_price = price
+
+    df["Swing High"] = False
+    df.loc[keep, "Swing High"] = True
+
+    # -----------------------
+
+    lows = df[df["Swing Low"]].copy()
+
+    keep = []
+
+    last_price = None
+
+    for idx, row in lows.iterrows():
+
+        price = row["Low"]
+
+        if last_price is None:
+            keep.append(idx)
+            last_price = price
+            continue
+
+        change = abs(price - last_price) / last_price
+
+        if change >= min_distance:
+            keep.append(idx)
+            last_price = price
+
+        else:
+            # احتفظ بالأقل
+            if price < last_price:
+                keep[-1] = idx
+                last_price = price
+
+    df["Swing Low"] = False
+    df.loc[keep, "Swing Low"] = True
+
+    return df
+    
+
 import matplotlib.pyplot as plt
 
 

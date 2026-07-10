@@ -1,7 +1,17 @@
 """
 data.py
 ========
-Historical data loader from Binance Vision.
+Historical Data Loader for Binance Vision
+
+Features
+--------
+✓ Download historical data automatically
+✓ Extract ZIP files
+✓ Read CSV files
+✓ Merge multiple months
+✓ Clean data
+✓ Remove duplicates
+✓ Return ready-to-use DataFrame
 
 Author: Mustafa Tariq
 """
@@ -12,9 +22,9 @@ import requests
 import pandas as pd
 
 
-# ============================================
-# إعدادات المشروع
-# ============================================
+# ======================================================
+# Project Directories
+# ======================================================
 
 DATASET_DIR = Path("datasets")
 DOWNLOAD_DIR = DATASET_DIR / "downloads"
@@ -24,9 +34,9 @@ DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 CSV_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# ============================================
-# تحميل شهر واحد
-# ============================================
+# ======================================================
+# Download One Month
+# ======================================================
 
 def download_month(symbol, interval, year, month):
 
@@ -47,34 +57,35 @@ def download_month(symbol, interval, year, month):
 
     print(f"Downloading {filename}")
 
-    r = requests.get(url, timeout=120)
-
-    r.raise_for_status()
+    response = requests.get(url, timeout=120)
+    response.raise_for_status()
 
     with open(zip_path, "wb") as f:
-        f.write(r.content)
+        f.write(response.content)
 
     return zip_path
 
 
-# ============================================
-# فك الضغط
-# ============================================
+# ======================================================
+# Extract ZIP
+# ======================================================
 
 def extract_zip(zip_path):
 
-    with zipfile.ZipFile(zip_path, "r") as zip_ref:
+    csv_path = CSV_DIR / (zip_path.stem + ".csv")
 
+    if csv_path.exists():
+        return csv_path
+
+    with zipfile.ZipFile(zip_path, "r") as zip_ref:
         zip_ref.extractall(CSV_DIR)
 
-    csv_name = zip_path.stem + ".csv"
-
-    return CSV_DIR / csv_name
+    return csv_path
 
 
-# ============================================
-# قراءة CSV
-# ============================================
+# ======================================================
+# Read CSV
+# ======================================================
 
 def read_csv(csv_path):
 
@@ -109,6 +120,16 @@ def read_csv(csv_path):
         ]
     ]
 
+    numeric_columns = [
+        "Open",
+        "High",
+        "Low",
+        "Close",
+        "Volume"
+    ]
+
+    df[numeric_columns] = df[numeric_columns].astype(float)
+
     df["Open Time"] = pd.to_datetime(
         df["Open Time"],
         unit="ms"
@@ -129,9 +150,9 @@ def read_csv(csv_path):
     return df
 
 
-# ============================================
-# تحميل فترة كاملة
-# ============================================
+# ======================================================
+# Load Historical Data
+# ======================================================
 
 def load_data(
     symbol="BTCUSDT",
@@ -173,6 +194,28 @@ def load_data(
 
     df = pd.concat(frames)
 
+    df = df[~df.index.duplicated()]
+
     df = df.sort_index()
 
     return df
+
+
+# ======================================================
+# Example
+# ======================================================
+
+if __name__ == "__main__":
+
+    df = load_data(
+        symbol="BTCUSDT",
+        interval="1h",
+        start_year=2024,
+        start_month=1,
+        end_year=2024,
+        end_month=2
+    )
+
+    print(df.head())
+    print(df.tail())
+    print(df.shape)

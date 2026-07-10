@@ -1,352 +1,378 @@
 """
-market_geometry.py
-==================
-
+=============================================================
 Market Geometry Engine
+Version : 1.0
 
-هذا الملف مسؤول عن فهم حركة السوق
-وليس مجرد حساب مؤشرات.
+Author : Mustafa Tariq
 
-Author: Mustafa Tariq
+فلسفة المشروع
+--------------
+
+لا نعتمد على المؤشرات.
+
+لا نعتمد على Pivot ثابت.
+
+السوق عبارة عن حركة هندسية.
+
+الشموع
+    ↓
+Movement
+    ↓
+Legs
+    ↓
+Pivots
+    ↓
+Market Structure
+    ↓
+Trading Signals
+
+=============================================================
 """
 
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import List, Optional
+
+import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 
-# ==========================================================
-# Swing Detection
-# ==========================================================
+# ============================================================
+# CONSTANTS
+# ============================================================
 
-def find_swings(df: pd.DataFrame, window: int = 7) -> pd.DataFrame:
-    """
-    اكتشاف القمم والقيعان باستخدام نافذة منزلقة.
+ATR_PERIOD = 14
 
-    Parameters
-    ----------
-    df : DataFrame
-        يجب أن يحتوي على High و Low.
+VOLATILITY_PERIOD = 20
 
-    window : int
-        حجم النافذة ويجب أن يكون عدداً فردياً.
+RETURN_PERIOD = 1
 
-    Returns
-    -------
-    DataFrame
-    """
+EPSILON = 1e-9
 
-    if window % 2 == 0:
-        raise ValueError("window must be an odd number.")
 
-    df = df.copy()
+# ============================================================
+# ENUMS
+# ============================================================
 
-    df["Swing High"] = False
-    df["Swing Low"] = False
+class Direction(Enum):
 
-    half = window // 2
+    UP = 1
 
-    highs = df["High"].values
-    lows = df["Low"].values
+    DOWN = -1
 
-    for i in range(half, len(df) - half):
+    SIDEWAYS = 0
 
-        high_window = highs[i-half:i+half+1]
-        low_window = lows[i-half:i+half+1]
 
-        if highs[i] == high_window.max():
-            df.iloc[i, df.columns.get_loc("Swing High")] = True
+class Trend(Enum):
 
-        if lows[i] == low_window.min():
-            df.iloc[i, df.columns.get_loc("Swing Low")] = True
+    UNKNOWN = 0
 
-    return df
+    BULLISH = 1
 
+    BEARISH = -1
 
-# ==========================================================
-# Swing Filter
-# ==========================================================
+    RANGE = 2
 
-def filter_swings(
-    df: pd.DataFrame,
-    min_distance: float = 0.007
-) -> pd.DataFrame:
-    """
-    إزالة القمم والقيعان المتقاربة.
 
-    Parameters
-    ----------
-    min_distance : float
+class PivotType(Enum):
 
-    مثال:
+    HIGH = "HIGH"
 
-    0.007 = 0.7%
-    """
+    LOW = "LOW"
 
-    df = df.copy()
 
-    # --------------------------------------------------
-    # HIGHS
-    # --------------------------------------------------
+class PivotStrength(Enum):
 
-    highs = df[df["Swing High"]]
+    WEAK = 0
 
-    keep = []
+    NORMAL = 1
 
-    last_price = None
+    STRONG = 2
 
-    for idx, row in highs.iterrows():
+    MAJOR = 3
 
-        price = row["High"]
 
-        if last_price is None:
+# ============================================================
+# PIVOT
+# ============================================================
 
-            keep.append(idx)
+@dataclass
 
-            last_price = price
+class Pivot:
 
-            continue
+    index: int
 
-        change = abs(price - last_price) / last_price
+    time: pd.Timestamp
 
-        if change >= min_distance:
+    price: float
 
-            keep.append(idx)
+    pivot_type: PivotType
 
-            last_price = price
+    strength: PivotStrength = PivotStrength.NORMAL
 
-        else:
+    score: float = 0.0
 
-            if price > last_price:
+    confirmed: bool = False
 
-                keep[-1] = idx
+    metadata: dict = field(default_factory=dict)
 
-                last_price = price
 
-    df["Swing High"] = False
+# ============================================================
+# LEG
+# ============================================================
 
-    if len(keep):
+@dataclass
 
-        df.loc[keep, "Swing High"] = True
+class Leg:
 
-    # --------------------------------------------------
-    # LOWS
-    # --------------------------------------------------
+    start_index: int
 
-    lows = df[df["Swing Low"]]
+    end_index: int
 
-    keep = []
+    start_price: float
 
-    last_price = None
+    end_price: float
 
-    for idx, row in lows.iterrows():
+    direction: Direction
 
-        price = row["Low"]
+    bars: int
 
-        if last_price is None:
+    length: float
 
-            keep.append(idx)
+    velocity: float = 0.0
 
-            last_price = price
+    acceleration: float = 0.0
 
-            continue
+    angle: float = 0.0
 
-        change = abs(price - last_price) / last_price
 
-        if change >= min_distance:
+# ============================================================
+# ENGINE
+# ============================================================
 
-            keep.append(idx)
+class MarketGeometry:
 
-            last_price = price
+    def __init__(self, df: pd.DataFrame):
 
-        else:
+        self.df = df.copy()
 
-            if price < last_price:
+        self.pivots: List[Pivot] = []
 
-                keep[-1] = idx
+        self.legs: List[Leg] = []
 
-                last_price = price
+        self.trend = Trend.UNKNOWN
 
-    df["Swing Low"] = False
+    def reset(self):
 
-    if len(keep):
+        self.pivots.clear()
 
-        df.loc[keep, "Swing Low"] = True
+        self.legs.clear()
 
-    return df
+        self.trend = Trend.UNKNOWN
 
-# ==========================================================
-# Build Pivot Table
-# ==========================================================
 
-def build_pivots(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    تحويل القمم والقيعان إلى جدول مرتب زمنياً.
+# ============================================================
+# TRUE RANGE
+# ============================================================
 
-    Returns
-    -------
-    DataFrame
+def true_range(df):
 
-    الأعمدة:
+    previous_close = df["Close"].shift(1)
 
-    Time
-    Type
-    Price
-    """
+    tr = pd.concat(
 
-    pivots = []
+        [
 
-    for index, row in df.iterrows():
+            df["High"] - df["Low"],
 
-        if row["Swing High"]:
+            (df["High"] - previous_close).abs(),
 
-            pivots.append(
-                {
-                    "Time": index,
-                    "Type": "H",
-                    "Price": row["High"]
-                }
+            (df["Low"] - previous_close).abs(),
+
+        ],
+
+        axis=1,
+
+    ).max(axis=1)
+
+    return tr
+
+
+# ============================================================
+# ATR
+# ============================================================
+
+def atr(
+
+    df,
+
+    period=ATR_PERIOD,
+
+):
+
+    tr = true_range(df)
+
+    return tr.rolling(period).mean()
+
+
+# ============================================================
+# VOLATILITY
+# ============================================================
+
+def volatility(
+
+    df,
+
+    period=VOLATILITY_PERIOD,
+
+):
+
+    returns = df["Close"].pct_change()
+
+    return returns.rolling(period).std()
+
+
+# ============================================================
+# MOMENTUM
+# ============================================================
+
+def momentum(df):
+
+    return df["Close"].diff()
+
+
+# ============================================================
+# VELOCITY
+# ============================================================
+
+def velocity(df):
+
+    return momentum(df)
+
+
+# ============================================================
+# ACCELERATION
+# ============================================================
+
+def acceleration(df):
+
+    return velocity(df).diff()
+
+
+# ============================================================
+# SLOPE
+# ============================================================
+
+def slope(series):
+
+    return series.diff()
+
+
+# ============================================================
+# NORMALIZE
+# ============================================================
+
+def normalize(series):
+
+    minimum = series.min()
+
+    maximum = series.max()
+
+    if maximum - minimum < EPSILON:
+
+        return pd.Series(
+
+            np.zeros(len(series)),
+
+            index=series.index,
+
+        )
+
+    return (
+
+        series - minimum
+
+    ) / (
+
+        maximum - minimum
+
+    )
+
+
+# ============================================================
+# PREPARE DATA
+# ============================================================
+
+def prepare_data(df):
+
+    data = df.copy()
+
+    data["ATR"] = atr(data)
+
+    data["Volatility"] = volatility(data)
+
+    data["Momentum"] = momentum(data)
+
+    data["Velocity"] = velocity(data)
+
+    data["Acceleration"] = acceleration(data)
+
+    data["Return"] = data["Close"].pct_change()
+
+    data["Normalized ATR"] = normalize(
+
+        data["ATR"].fillna(0)
+
+    )
+
+    data["Normalized Volatility"] = normalize(
+
+        data["Volatility"].fillna(0)
+
+    )
+
+    return data
+
+
+# ============================================================
+# VALIDATE DATA
+# ============================================================
+
+def validate_data(df):
+
+    required = [
+
+        "Open",
+
+        "High",
+
+        "Low",
+
+        "Close",
+
+        "Volume",
+
+    ]
+
+    for column in required:
+
+        if column not in df.columns:
+
+            raise ValueError(
+
+                f"Missing column: {column}"
+
             )
 
-        if row["Swing Low"]:
+    if len(df) < 50:
 
-            pivots.append(
-                {
-                    "Time": index,
-                    "Type": "L",
-                    "Price": row["Low"]
-                }
-            )
+        raise ValueError(
 
-    pivots = pd.DataFrame(pivots)
+            "Dataset is too small."
 
-    if pivots.empty:
-        return pivots
-
-    pivots.sort_values(
-        "Time",
-        inplace=True
-    )
-
-    pivots.reset_index(
-        drop=True,
-        inplace=True
-    )
-
-    return pivots
-
-
-# ==========================================================
-# Plot Swings
-# ==========================================================
-
-def plot_swings(
-    df: pd.DataFrame,
-    last: int = 250
-):
-    """
-    رسم السعر مع القمم والقيعان.
-    """
-
-    data = df.tail(last)
-
-    plt.figure(figsize=(18,8))
-
-    plt.plot(
-        data.index,
-        data["Close"],
-        linewidth=1.3,
-        label="Close"
-    )
-
-    highs = data[data["Swing High"]]
-
-    plt.scatter(
-        highs.index,
-        highs["High"],
-        marker="^",
-        s=90,
-        label="Swing High"
-    )
-
-    lows = data[data["Swing Low"]]
-
-    plt.scatter(
-        lows.index,
-        lows["Low"],
-        marker="v",
-        s=90,
-        label="Swing Low"
-    )
-
-    plt.grid(True)
-
-    plt.legend()
-
-    plt.tight_layout()
-
-    plt.show()
-
-
-# ==========================================================
-# Plot ZigZag
-# ==========================================================
-
-def plot_zigzag(
-    df: pd.DataFrame,
-    last: int = 250
-):
-    """
-    رسم ZigZag بين القمم والقيعان.
-    """
-
-    data = df.tail(last)
-
-    pivots = build_pivots(data)
-
-    plt.figure(figsize=(18,8))
-
-    plt.plot(
-        data.index,
-        data["Close"],
-        linewidth=1,
-        alpha=0.6,
-        label="Close"
-    )
-
-    if len(pivots) > 1:
-
-        plt.plot(
-            pivots["Time"],
-            pivots["Price"],
-            linewidth=2,
-            label="ZigZag"
         )
 
-        highs = pivots[pivots["Type"] == "H"]
-
-        lows = pivots[pivots["Type"] == "L"]
-
-        plt.scatter(
-            highs["Time"],
-            highs["Price"],
-            marker="^",
-            s=100,
-            label="High"
-        )
-
-        plt.scatter(
-            lows["Time"],
-            lows["Price"],
-            marker="v",
-            s=100,
-            label="Low"
-        )
-
-    plt.grid(True)
-
-    plt.legend()
-
-    plt.tight_layout()
-
-    plt.show()
+    return True
     

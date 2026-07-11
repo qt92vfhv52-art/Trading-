@@ -1,23 +1,18 @@
 from dataclasses import dataclass, field
-from typing import List, Dict
+from enum import Enum
 
 from price_wave import Wave
 
 
-@dataclass
-class WaveVertex:
+class EdgeType(Enum):
 
-    id: int
+    NEXT = "NEXT"
 
-    wave: Wave
+    PREVIOUS = "PREVIOUS"
 
-    parents: List[int] = field(default_factory=list)
+    OVERLAP = "OVERLAP"
 
-    children: List[int] = field(default_factory=list)
-
-    score: float = 0.0
-
-    level: int = 0
+    CONTAIN = "CONTAIN"
 
 
 @dataclass
@@ -27,120 +22,173 @@ class WaveEdge:
 
     target: int
 
-    relation: str
+    relation: EdgeType
 
     weight: float = 1.0
 
 
+@dataclass
 class WaveGraph:
 
-    def __init__(self):
+    waves: list[Wave]
 
-        self.vertices: Dict[int, WaveVertex] = {}
+    edges: list[WaveEdge] = field(default_factory=list)
 
-        self.edges: List[WaveEdge] = []
+    def build(self):
 
-    # -----------------------------
+        self.edges.clear()
 
-    def add_wave(self, wave):
+        self.build_next_edges()
 
-        idx = len(self.vertices)
+        self.build_overlap_edges()
 
-        self.vertices[idx] = WaveVertex(
+        self.build_containment_edges()
 
-            id=idx,
+        return self
 
-            wave=wave,
+    # ----------------------------------------------------
 
-        )
+    def build_next_edges(self):
 
-        return idx
+        for i in range(len(self.waves) - 1):
 
-    # -----------------------------
+            self.edges.append(
 
-    def add_relation(
+                WaveEdge(
 
-        self,
+                    source=i,
 
-        source,
+                    target=i + 1,
 
-        target,
+                    relation=EdgeType.NEXT,
 
-        relation,
-
-        weight=1.0,
-
-    ):
-
-        self.edges.append(
-
-            WaveEdge(
-
-                source,
-
-                target,
-
-                relation,
-
-                weight,
+                )
 
             )
 
-        )
+            self.edges.append(
 
-        self.vertices[source].children.append(target)
+                WaveEdge(
 
-        self.vertices[target].parents.append(source)
+                    source=i + 1,
 
-    # -----------------------------
+                    target=i,
 
-    def get(self, idx):
+                    relation=EdgeType.PREVIOUS,
 
-        return self.vertices[idx]
+                )
 
-    # -----------------------------
+            )
 
-    def all_vertices(self):
+    # ----------------------------------------------------
 
-        return list(self.vertices.values())
+    def build_overlap_edges(self):
 
-    # -----------------------------
+        n = len(self.waves)
 
-    def all_edges(self):
+        for i in range(n):
 
-        return self.edges
+            a = self.waves[i]
 
-    # -----------------------------
+            for j in range(i + 1, n):
+
+                b = self.waves[j]
+
+                if (
+
+                    a.start.index <= b.end.index
+
+                    and
+
+                    b.start.index <= a.end.index
+
+                ):
+
+                    self.edges.append(
+
+                        WaveEdge(
+
+                            source=i,
+
+                            target=j,
+
+                            relation=EdgeType.OVERLAP,
+
+                        )
+
+                    )
+
+    # ----------------------------------------------------
+
+    def build_containment_edges(self):
+
+        n = len(self.waves)
+
+        for i in range(n):
+
+            a = self.waves[i]
+
+            for j in range(n):
+
+                if i == j:
+
+                    continue
+
+                b = self.waves[j]
+
+                if (
+
+                    a.start.index <= b.start.index
+
+                    and
+
+                    a.end.index >= b.end.index
+
+                ):
+
+                    self.edges.append(
+
+                        WaveEdge(
+
+                            source=i,
+
+                            target=j,
+
+                            relation=EdgeType.CONTAIN,
+
+                        )
+
+                    )
+
+    # ----------------------------------------------------
+
+    def neighbors(self, index, relation=None):
+
+        result = []
+
+        for edge in self.edges:
+
+            if edge.source != index:
+
+                continue
+
+            if relation is not None:
+
+                if edge.relation != relation:
+
+                    continue
+
+            result.append(edge.target)
+
+        return result
+
+    # ----------------------------------------------------
 
     def print_graph(self):
 
         print("=" * 60)
 
-        print("VERTICES")
-
-        print("=" * 60)
-
-        for vertex in self.vertices.values():
-
-            wave = vertex.wave
-
-            print(
-
-                f"[{vertex.id}] "
-
-                f"{wave.direction.name} "
-
-                f"{wave.start.index}->{wave.end.index} "
-
-                f"{wave.start.price:.2f}->{wave.end.price:.2f}"
-
-            )
-
-        print()
-
-        print("=" * 60)
-
-        print("EDGES")
+        print("GRAPH")
 
         print("=" * 60)
 
@@ -148,16 +196,10 @@ class WaveGraph:
 
             print(
 
-                edge.source,
+                f"{edge.source} "
 
-                "--",
+                f"-- {edge.relation.name} --> "
 
-                edge.relation,
-
-                "-->",
-
-                edge.target,
-
-                f"(w={edge.weight:.2f})"
+                f"{edge.target}"
 
             )

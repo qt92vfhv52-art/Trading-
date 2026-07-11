@@ -118,3 +118,54 @@ class ADCEngine:
                     extreme_index = i
 
         return events
+
+import matplotlib.pyplot as plt
+
+
+def plot_events(df, events):
+
+    plt.figure(figsize=(18,7))
+
+    plt.plot(df.index, df["Close"], linewidth=1)
+
+    highs_x = []
+    highs_y = []
+
+    lows_x = []
+    lows_y = []
+
+    for event in events:
+
+        if event.event_type == DCType.HIGH:
+
+            highs_x.append(df.index[event.index])
+            highs_y.append(event.price)
+
+        else:
+
+            lows_x.append(df.index[event.index])
+            lows_y.append(event.price)
+
+    plt.scatter(
+        highs_x,
+        highs_y,
+        marker="^",
+        s=80,
+        label="DC High",
+    )
+
+    plt.scatter(
+        lows_x,
+        lows_y,
+        marker="v",
+        s=80,
+        label="DC Low",
+    )
+
+    plt.grid(True)
+
+    plt.legend()
+
+    plt.tight_layout()
+
+    plt.show()

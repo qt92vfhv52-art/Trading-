@@ -1,133 +1,147 @@
-from typing import List
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import List, Optional
 
-from wave_tree import WaveNode, WaveLevel
+from price_wave import Wave
 
 
-class WaveTreeBuilder:
+class WaveLevel(Enum):
 
-    def __init__(self, waves):
+    MICRO = 0
 
-        self.waves = waves
+    MINOR = 1
 
-    def build(self):
+    INTERMEDIATE = 2
 
-        if len(self.waves) == 0:
+    MAJOR = 3
 
-            return []
+    PRIMARY = 4
 
-        # إنشاء المستوى الأول (MICRO)
+    CYCLE = 5
+
+
+@dataclass
+class WaveNode:
+
+    # الموجة التي تمثل هذه العقدة
+    wave: Wave
+
+    # مستوى العقدة
+    level: WaveLevel
+
+    # الأب
+    parent: Optional["WaveNode"] = None
+
+    # الأبناء
+    children: List["WaveNode"] = field(default_factory=list)
+
+    # درجة القوة
+    score: float = 0.0
+
+    # عمق العقدة
+    depth: int = 0
+
+    # -------------------------
+
+    @property
+    def start(self):
+
+        return self.wave.start.index
+
+    @property
+    def end(self):
+
+        return self.wave.end.index
+
+    @property
+    def start_price(self):
+
+        return self.wave.start.price
+
+    @property
+    def end_price(self):
+
+        return self.wave.end.price
+
+    @property
+    def size(self):
+
+        return abs(self.wave.price_change)
+
+    @property
+    def duration(self):
+
+        return self.wave.candle_count
+
+    @property
+    def direction(self):
+
+        return self.wave.direction
+
+    @property
+    def slope(self):
+
+        return self.wave.slope
+
+    @property
+    def strength(self):
+
+        return self.wave.strength
+
+    # -------------------------
+
+    def add_child(self, child: "WaveNode"):
+
+        child.parent = self
+
+        child.depth = self.depth + 1
+
+        self.children.append(child)
+
+    # -------------------------
+
+    def is_leaf(self):
+
+        return len(self.children) == 0
+
+    # -------------------------
+
+    def descendants(self):
 
         nodes = []
 
-        for wave in self.waves:
+        for child in self.children:
 
-            node = WaveNode(
+            nodes.append(child)
 
-                wave=wave,
+            nodes.extend(child.descendants())
 
-                level=WaveLevel.MICRO,
+        return nodes
 
-            )
+    # -------------------------
 
-            node.score = self.score_wave(wave)
+    def print_tree(self, indent=0):
 
-            nodes.append(node)
+        print(
+            " " * indent +
+            f"{self.level.name} | "
+            f"{self.direction.name} | "
+            f"{self.size:.2f} | "
+            f"Score={self.score:.2f}"
+        )
 
-        current = nodes
+        for child in self.children:
 
-        level = WaveLevel.MINOR
+            child.print_tree(indent + 4)
 
-        # دمج الموجات تدريجياً حتى يبقى جذر واحد
+    # -------------------------
 
-        while len(current) > 1:
+    def __repr__(self):
 
-            current = self.merge_level(
-
-                current,
-
-                level,
-
-            )
-
-            if level != WaveLevel.CYCLE:
-
-                level = WaveLevel(level.value + 1)
-
-            else:
-
-                break
-
-        return current
-
-    def score_wave(self, wave):
-
-        score = 0.0
-
-        score += abs(wave.price_change) * 0.55
-
-        score += wave.length * 6
-
-        score += wave.velocity * 0.35
-
-        return score
-      
-    def merge_level(
-
-        self,
-
-        nodes,
-
-        new_level,
-
-    ):
-
-        if len(nodes) <= 1:
-
-            return nodes
-
-        merged = []
-
-        i = 0
-
-        while i < len(nodes):
-
-            # إذا بقي عنصر واحد
-
-            if i == len(nodes) - 1:
-
-                nodes[i].level = new_level
-
-                merged.append(nodes[i])
-
-                break
-
-            left = nodes[i]
-
-            right = nodes[i + 1]
-
-            # اختيار الموجة الأقوى كالأب
-
-            if left.score >= right.score:
-
-                parent = left
-
-                child = right
-
-            else:
-
-                parent = right
-
-                child = left
-
-            parent.level = new_level
-
-            parent.add_child(child)
-
-            parent.score += child.score * 0.45
-
-            merged.append(parent)
-
-            i += 2
-
-        return merged
-      
+        return (
+            f"<WaveNode "
+            f"{self.level.name} "
+            f"{self.direction.name} "
+            f"Size={self.size:.2f} "
+            f"Strength={self.strength:.2f}>"
+        )

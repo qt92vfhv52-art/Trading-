@@ -1,7 +1,7 @@
 from typing import List
 
 from dc_event import DCType
-from wave import Wave, Trend
+from price_wave import Wave, Trend
 
 
 class WaveEngine:

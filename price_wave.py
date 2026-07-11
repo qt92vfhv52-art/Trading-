@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from price_wave import Wave, Trend
+
 from dc_event import DCEvent
 
 

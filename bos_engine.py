@@ -1,62 +1,62 @@
-from dc_event import DCType
-
-
 class BOSEngine:
 
-    def __init__(self, waves):
+    def __init__(self, waves, min_percent=2.0):
 
         self.waves = waves
+        self.min_percent = min_percent
 
     def detect(self):
 
         bos = []
 
-        last_high = None
-        last_low = None
+        last_bull = None
+        last_bear = None
 
         for wave in self.waves:
 
-            # موجة صاعدة
+            move = abs(wave.percent_change)
+
+            if move < self.min_percent:
+                continue
+
+            # اتجاه صاعد
             if wave.direction.name == "UP":
 
-                if last_high is None:
+                if last_bull is None:
 
-                    last_high = wave.end.price
+                    last_bull = wave
                     continue
 
-                if wave.end.price > last_high:
+                if wave.end.price > last_bull.end.price:
 
-                    bos.append(
-                        {
-                            "type": "Bullish BOS",
-                            "index": wave.end.index,
-                            "price": wave.end.price,
-                            "wave": wave,
-                        }
-                    )
+                    bos.append({
+                        "type": "Bullish BOS",
+                        "wave": wave,
+                        "price": wave.end.price,
+                        "index": wave.end.index,
+                        "strength": move,
+                    })
 
-                    last_high = wave.end.price
+                    last_bull = wave
 
-            # موجة هابطة
+            # اتجاه هابط
             else:
 
-                if last_low is None:
+                if last_bear is None:
 
-                    last_low = wave.end.price
+                    last_bear = wave
                     continue
 
-                if wave.end.price < last_low:
+                if wave.end.price < last_bear.end.price:
 
-                    bos.append(
-                        {
-                            "type": "Bearish BOS",
-                            "index": wave.end.index,
-                            "price": wave.end.price,
-                            "wave": wave,
-                        }
-                    )
+                    bos.append({
+                        "type": "Bearish BOS",
+                        "wave": wave,
+                        "price": wave.end.price,
+                        "index": wave.end.index,
+                        "strength": move,
+                    })
 
-                    last_low = wave.end.price
+                    last_bear = wave
 
         return bos
-      

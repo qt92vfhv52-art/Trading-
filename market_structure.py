@@ -4,40 +4,83 @@ class MarketStructure:
 
         self.waves = waves
 
+    def _extract_highs(self):
+
+        highs = []
+
+        for wave in self.waves:
+
+            if wave.direction.name == "UP":
+
+                highs.append({
+                    "wave": wave,
+                    "price": wave.end.price
+                })
+
+        return highs
+
+    def _extract_lows(self):
+
+        lows = []
+
+        for wave in self.waves:
+
+            if wave.direction.name == "DOWN":
+
+                lows.append({
+                    "wave": wave,
+                    "price": wave.end.price
+                })
+
+        return lows
+
     def build(self):
 
         swings = []
 
-        for i in range(1, len(self.waves) - 1):
+        highs = self._extract_highs()
+        lows = self._extract_lows()
 
-            prev = self.waves[i - 1]
-            cur = self.waves[i]
-            nxt = self.waves[i + 1]
+        # -------- Swing High --------
 
-            if cur.direction.name == "UP":
+        for i in range(1, len(highs) - 1):
 
-                if (
-                    cur.end.price > prev.end.price
-                    and
-                    cur.end.price > nxt.end.price
-                ):
+            prev = highs[i - 1]
+            cur = highs[i]
+            nxt = highs[i + 1]
 
-                    swings.append({
-                        "type": "HIGH",
-                        "wave": cur
-                    })
+            if (
+                cur["price"] > prev["price"]
+                and
+                cur["price"] > nxt["price"]
+            ):
 
-            else:
+                swings.append({
+                    "type": "HIGH",
+                    "wave": cur["wave"]
+                })
 
-                if (
-                    cur.end.price < prev.end.price
-                    and
-                    cur.end.price < nxt.end.price
-                ):
+        # -------- Swing Low --------
 
-                    swings.append({
-                        "type": "LOW",
-                        "wave": cur
-                    })
+        for i in range(1, len(lows) - 1):
+
+            prev = lows[i - 1]
+            cur = lows[i]
+            nxt = lows[i + 1]
+
+            if (
+                cur["price"] < prev["price"]
+                and
+                cur["price"] < nxt["price"]
+            ):
+
+                swings.append({
+                    "type": "LOW",
+                    "wave": cur["wave"]
+                })
+
+        swings.sort(
+            key=lambda x: x["wave"].end.index
+        )
 
         return swings

@@ -95,7 +95,8 @@ class WaveEngine:
             reverse=True
 
         )[:n]
-      import matplotlib.pyplot as plt
+        
+import matplotlib.pyplot as plt
 
 
 def plot_waves(df, waves):
@@ -135,4 +136,4 @@ def plot_waves(df, waves):
 
     plt.tight_layout()
 
-    plt.show()
+    plt.show()    

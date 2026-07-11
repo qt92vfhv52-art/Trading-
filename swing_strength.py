@@ -1,29 +1,26 @@
 from dataclasses import dataclass
 from typing import List
 
-from dc_event import DCEvent, DCType
+from dc_event import DCEvent
+
+
 @dataclass
 class Swing:
 
     event: DCEvent
-
     strength: float
-
     left_distance: int
-
     right_distance: int
-
     price_move: float
-
     major: bool = False
-  
-  class SwingStrengthEngine:
+
+
+class SwingStrengthEngine:
 
     def __init__(self, events: List[DCEvent]):
-
         self.events = events
 
-        def calculate(self):
+    def calculate(self):
 
         swings = []
 
@@ -62,4 +59,3 @@ class Swing:
             )
 
         return swings
-      

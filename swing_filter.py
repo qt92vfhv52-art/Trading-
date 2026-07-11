@@ -95,7 +95,9 @@ class SwingFilter:
             events = result
 
         return events
-          def score_events(self, events):
+
+
+def score_events(self, events):
 
         scores = []
 
